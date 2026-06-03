@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoring & Kontrol Lampu - IoTku</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-100 font-sans min-h-screen flex flex-col justify-between">
+
+    <header class="bg-blue-600 text-white text-center py-4 shadow-md">
+        <h1 class="text-xl font-bold tracking-wide">SMART LIGHTING DASHBOARD</h1>
+        <p class="text-xs opacity-80">Monitoring & Kontrol Real-time via IoTku.org</p>
+    </header>
+
+    <main class="max-w-md mx-auto w-full p-4 flex-grow flex flex-col justify-center gap-4">
+        
+        <div class="bg-white rounded-2xl shadow-xl p-6 text-center border border-slate-200 transition-all">
+            <h2 class="text-gray-500 font-medium text-sm tracking-wider uppercase mb-2">Intensitas Cahaya</h2>
+            
+            <div class="flex items-center justify-center gap-2 my-4">
+                <span id="lux-value" class="text-6xl font-black text-slate-800 transition-all duration-300">0</span>
+                <span class="text-2xl font-bold text-gray-400">Lux</span>
+            </div>
+
+            <div class="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full text-xs font-semibold mt-2">
+                <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                <span id="status-text" class="text-gray-600">Menghubungkan...</span>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl p-6 text-center border border-slate-200 space-y-4">
+            <div>
+                <h3 class="text-gray-500 font-medium text-xs tracking-wider uppercase mb-2">Mode Operasi</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="sendCmd('AUTO')" id="btn-auto" class="py-2 px-4 rounded-xl font-bold bg-blue-600 text-white shadow-md transition-all cursor-pointer">OTOMATIS</button>
+                    <button onclick="sendCmd('MANUAL')" id="btn-manual" class="py-2 px-4 rounded-xl font-bold bg-slate-200 text-slate-700 transition-all cursor-pointer">MANUAL</button>
+                </div>
+            </div>
+
+            <div id="sakelar-container" class="opacity-40 pointer-events-none transition-all duration-300">
+                <h3 class="text-gray-500 font-medium text-xs tracking-wider uppercase mb-2">Sakelar Lampu (Manual)</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="sendCmd('ON')" id="btn-on" class="py-2 px-4 rounded-xl font-bold bg-slate-200 text-slate-700 transition-all cursor-pointer">ON</button>
+                    <button onclick="sendCmd('OFF')" id="btn-off" class="py-2 px-4 rounded-xl font-bold bg-slate-200 text-slate-700 transition-all cursor-pointer">OFF</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 text-emerald-400 font-mono text-[10px] p-3 rounded-xl shadow-inner">
+            <div class="flex justify-between border-b border-slate-700 pb-1 mb-1 text-slate-400">
+                <span>&gt;_ LIVE LOG TRAFFIC</span>
+                <button onclick="clearLog()" class="hover:text-white underline cursor-pointer">Clear</button>
+            </div>
+            <div id="log-box" class="h-20 overflow-y-auto whitespace-pre-wrap text-slate-300 select-all">Menunggu data...</div>
+        </div>
+
+        <div class="bg-white rounded-xl p-4 shadow-sm text-xs text-gray-500 space-y-2">
+            <div class="flex justify-between">
+                <span>ID Sensor IoTku:</span>
+                <span class="font-mono font-bold text-slate-700">00387</span>
+            </div>
+            <div class="flex justify-between">
+                <span>Pembaruan Terakhir:</span>
+                <span id="last-update" class="font-medium text-slate-700">-</span>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="text-center py-3 text-gray-400 text-xs bg-slate-200/50">
+        &copy; 2026 Prototipe IoT Lampu. All Rights Reserved.
+    </footer>
+
+    <script>
+        const luxValueEl = document.getElementById('lux-value');
+        const statusDotEl = document.getElementById('status-dot');
+        const statusTextEl = document.getElementById('status-text');
+        const lastUpdateEl = document.getElementById('last-update');
+        const logBoxEl = document.getElementById('log-box');
+
+        const idSensor = "00387"; 
+        const passkey = "0987654"; 
+        
+        const socketUrl = `wss://iotku.org:443/?idsensor=${idSensor}&passkey=${passkey}`;
+        let socket;
+        let firstLog = true;
+
+        function connectWebSocket() {
+            socket = new WebSocket(socketUrl);
+
+            socket.onopen = function(e) {
+                statusDotEl.className = "w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]";
+                statusTextEl.innerText = "Terhubung (Real-time)";
+                statusTextEl.className = "text-green-600 font-medium";
+                addLog("Terhubung ke WebSocket Server IoTku.");
+            };
+
+            socket.onmessage = function(event) {
+                const rawData = event.data.trim();
+                addLog(`Data Masuk: ${rawData}`);
+                
+                try {
+                    // Melakukan ekstrak data JSON dari server iotku
+                    const jsonObj = JSON.parse(rawData);
+                    
+                    // 1. Ekstrak nilai lux jika parameter 'nilai' ada
+                    if (jsonObj.nilai !== undefined) {
+                        const nilaiLux = jsonObj.nilai;
+                        luxValueEl.innerText = nilaiLux;
+                        
+                        const luxInt = parseInt(nilaiLux);
+                        if (luxInt < 150) {
+                            luxValueEl.className = "text-6xl font-black text-blue-600 transition-all duration-300";
+                        } else {
+                            luxValueEl.className = "text-6xl font-black text-amber-500 transition-all duration-300";
+                        }
+                    }
+                    
+                    // 2. Ekstrak balik perintah kontrol jika dikirim ulang oleh server (untuk sinkronisasi tombol)
+                    if (jsonObj.msg !== undefined) {
+                        const cmd = jsonObj.msg;
+                        if (cmd.includes("AUTO")) updateUI_Mode(true);
+                        if (cmd.includes("MANUAL")) updateUI_Mode(false);
+                        if (cmd.includes("ON")) updateUI_Sakelar(true);
+                        if (cmd.includes("OFF")) updateUI_Sakelar(false);
+                    }
+                } catch (e) {
+                    // Jika data yang masuk berupa teks string biasa (bukan objek JSON)
+                    if (rawData.includes("AUTO")) updateUI_Mode(true);
+                    if (rawData.includes("MANUAL")) updateUI_Mode(false);
+                    if (rawData.includes("ON")) updateUI_Sakelar(true);
+                    if (rawData.includes("OFF")) updateUI_Sakelar(false);
+                }
+
+                const waktuSekarang = new Date();
+                lastUpdateEl.innerText = waktuSekarang.toLocaleTimeString('id-ID');
+            };
+
+            socket.onclose = function(e) {
+                statusDotEl.className = "w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#ef4444]";
+                statusTextEl.innerText = "Koneksi Terputus. Menghubungkan ulang...";
+                statusTextEl.className = "text-red-500 font-medium";
+                addLog("Koneksi terputus! Mencoba hubungkan ulang...");
+                setTimeout(connectWebSocket, 5000);
+            };
+
+            socket.onerror = function(err) {
+                console.error("WebSocket Error: ", err);
+                socket.close();
+            };
+        }
+
+        // FUNGSI UTAMA MENGIRIM PERINTAH DALAM FORMAT STRUKTUR BROKER IOTKU
+        function sendCmd(command) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                // Membungkus perintah ke dalam format String JSON yang dipahami oleh broker IoTku
+                const payloadKontrol = JSON.stringify({
+                    idsensor: idSensor,
+                    passkey: passkey,
+                    msg: command
+                });
+
+                socket.send(payloadKontrol);
+                addLog(`Kirim Perintah -> ${command}`);
+                
+                // Transisi tombol lokal demi kenyamanan user
+                if (command === 'AUTO') updateUI_Mode(true);
+                if (command === 'MANUAL') updateUI_Mode(false);
+                if (command === 'ON') updateUI_Sakelar(true);
+                if (command === 'OFF') updateUI_Sakelar(false);
+            } else {
+                alert("Gagal mengirim! Koneksi terputus.");
+            }
+        }
+
+        function updateUI_Mode(isAuto) {
+            const btnAuto = document.getElementById('btn-auto');
+            const btnManual = document.getElementById('btn-manual');
+            const sakelarContainer = document.getElementById('sakelar-container');
+
+            if (isAuto) {
+                btnAuto.className = "py-2 px-4 rounded-xl font-bold bg-blue-600 text-white shadow-md transition-all cursor-pointer";
+                btnManual.className = "py-2 px-4 rounded-xl font-bold bg-slate-200 text-slate-700 transition-all cursor-pointer";
+                sakelarContainer.className = "opacity-40 pointer-events-none transition-all duration-300";
+            } else {
+                btnAuto.className = "py-2 px-4 rounded-xl font-bold bg-slate-200 text-slate-700 transition-all cursor-pointer";
+                btnManual.className = "py-2 px-4 rounded-xl font-bold bg-blue-600 text-white shadow-md transition-all cursor-pointer";
+                sakelarContainer.className = "opacity-100 pointer-events-auto transition-all duration-300";
+            }
+        }
+
+        function updateUI_Sakelar(isOn) {
+            const btnOn = document.getElementById('btn-on');
+            const btnOff = document.getElementById('btn-off');
+
+            if (isOn) {
+                btnOn.className = "py-2 px-4 rounded-xl font-bold bg-emerald-500 text-white shadow-md transition-all cursor-pointer";
+                btnOff.className = "py-2 px-4 rounded-xl font-bold bg-slate-200 text-slate-700 transition-all cursor-pointer";
+            } else {
+                btnOn.className = "py-2 px-4 rounded-xl font-bold bg-slate-200 text-slate-700 transition-all cursor-pointer";
+                btnOff.className = "py-2 px-4 rounded-xl font-bold bg-rose-500 text-white shadow-md transition-all cursor-pointer";
+            }
+        }
+
+        function addLog(text) {
+            const waktu = new Date().toLocaleTimeString('id-ID');
+            if (firstLog) {
+                logBoxEl.innerText = `[${waktu}] ${text}`;
+                firstLog = false;
+            } else {
+                logBoxEl.innerText += `\n[${waktu}] ${text}`;
+            }
+            logBoxEl.scrollTop = logBoxEl.scrollHeight;
+        }
+
+        function clearLog() {
+            logBoxEl.innerText = "";
+            firstLog = true;
+        }
+
+        connectWebSocket();
+    </script>
+</body>
+</html>
