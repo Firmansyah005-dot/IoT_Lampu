@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoTku.org - Kontrol Lampu & Sensor Lux</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --card-bg: #1a1a1e;
+            --text-color: #e1e1e6;
+            --primary: #4ea8de;
+            --success: #04d361;
+            --danger: #e33d3d;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+
+        .status-koneksi {
+            text-align: center;
+            font-size: 14px;
+            margin-bottom: 25px;
+            font-weight: bold;
+        }
+
+        .terhubung { color: var(--success); }
+        .terputus { color: var(--danger); }
+
+        .widget {
+            background: rgba(255,255,255,0.03);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .widget-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8f8f9d;
+            margin-bottom: 10px;
+        }
+
+        .value {
+            font-size: 48px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        .unit {
+            font-size: 20px;
+            font-weight: normal;
+            color: #8f8f9d;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #29292e;
+            color: #fff;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-active-mode {
+            background-color: var(--primary);
+            color: #000;
+        }
+
+        .btn-on { background-color: var(--success); color: #000; }
+        .btn-off { background-color: var(--danger); color: #fff; }
+        
+        button:disabled {
+            background-color: #1f1f23;
+            color: #55555a;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .log-panel {
+            background: #09090a;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 11px;
+            max-height: 100px;
+            overflow-y: auto;
+            color: #a8a8b3;
+            border: 1px solid #29292e;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>IoTku Lamp Controller</h2>
+    <div id="statusKoneksi" class="status-koneksi terputus">Menghubungkan ke IoTku...</div>
+
+    <div class="widget">
+        <div class="widget-title">Intensitas Cahaya</div>
+        <div class="value"><span id="luxVal">0</span> <span class="unit">Lux</span></div>
+    </div>
+
+    <div class="widget">
+        <div class="widget-title">Mode Operasi</div>
+        <div class="btn-group">
+            <button id="btnAuto" onclick="setMode('AUTO')">OTOMATIS</button>
+            <button id="btnManual" onclick="setMode('MANUAL')">MANUAL</button>
+        </div>
+    </div>
+
+    <div class="widget">
+        <div class="widget-title">Sakelar Lampu (Manual)</div>
+        <div class="btn-group">
+            <button id="btnOn" onclick="sendControl('ON')" disabled>ON</button>
+            <button id="btnOff" onclick="sendControl('OFF')" disabled>OFF</button>
+        </div>
+    </div>
+
+    <div class="widget-title" style="font-size: 11px; margin-bottom: 5px;">Live Log Data</div>
+    <div id="logPanel" class="log-panel">Sistem siap...</div>
+</div>
+
+<script>
+    // Konfigurasi mencocokkan setingan dari file iot_lampu.ino kamu
+    const idLampu = "00387"; [cite: 3]
+    const passkey = "1122334455"; [cite: 4]
+    const wsUrl = `wss://iotku.org:443/?idsensor=${idLampu}&passkey=${passkey}`; [cite: 2, 21]
+
+    let socket;
+    let currentMode = "AUTO";
+
+    // Elemen DOM HTML
+    const statusKoneksi = document.getElementById('statusKoneksi');
+    const luxVal = document.getElementById('luxVal');
+    const btnAuto = document.getElementById('btnAuto');
+    const btnManual = document.getElementById('btnManual');
+    const btnOn = document.getElementById('btnOn');
+    const btnOff = document.getElementById('btnOff');
+    const logPanel = document.getElementById('logPanel');
+
+    function cetakLog(pesan) {
+        const waktu = new Date().toLocaleTimeString();
+        logPanel.innerHTML += `[${waktu}] ${pesan}<br>`;
+        logPanel.scrollTop = logPanel.scrollHeight;
+    }
+
+    function inisialisasiWebSocket() {
+        cetakLog("Mencoba menyambung ke server...");
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = function(e) {
+            statusKoneksi.innerText = "Terhubung ke iotku.org";
+            statusKoneksi.className = "status-koneksi terhubung";
+            cetakLog("Koneksi WebSocket Berhasil Terbuka.");
+            
+            // Minta status awal ke server
+            updateUI();
+        };
+
+        socket.onmessage = function(event) {
+            const dataMasuk = event.data;
+            
+            // Cek apakah data bertipe JSON (data sensor dari ESP32)
+            if (dataMasuk.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(dataMasuk);
+                    if(parsed.lux !== undefined) {
+                        luxVal.innerText = parsed.lux;
+                        cetakLog(`Menerima data sensor: ${parsed.lux} Lux`);
+                    }
+                } catch(e) {
+                    console.error("Gagal parse JSON:", e);
+                }
+            } else {
+                // Berupa text command string (Sinkronisasi dari web/ESP lain)
+                cetakLog(`Pesan teks masuk: ${dataMasuk}`);
+                if (dataMasuk.includes("AUTO")) {
+                    currentMode = "AUTO";
+                    updateUI();
+                } else if (dataMasuk.includes("MANUAL")) {
+                    currentMode = "MANUAL";
+                    updateUI();
+                }
+            }
+        };
+
+        socket.onclose = function(event) {
+            statusKoneksi.innerText = "Terputus! Menghubungkan kembali dalam 5 detik...";
+            statusKoneksi.className = "status-koneksi terputus";
+            cetakLog("Koneksi terputus dari server.");
+            // Otomatis reconnect seperti program ESP
+            setTimeout(inisialisasiWebSocket, 5000);
+        };
+
+        socket.onerror = function(error) {
+            cetakLog("Terjadi Error pada jaringan WebSocket");
+            console.error(`[error] ${error.message}`);
+        };
+    }
+
+    // Fungsi mengubah mode (AUTO / MANUAL)
+    function setMode(mode) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(mode);
+            currentMode = mode;
+            cetakLog(`Mengubah mode ke: ${mode}`);
+            updateUI();
+        } else {
+            alert("Gagal mengirim! Anda tidak terhubung ke server.");
+        }
+    }
+
+    // Fungsi mengontrol sakelar ON/OFF
+    function sendControl(command) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            if (currentMode === "MANUAL") {
+                socket.send(command);
+                cetakLog(`Mengirim perintah sakelar: ${command}`);
+            }
+        } else {
+            alert("Gagal mengirim! Anda tidak terhubung ke server.");
+        }
+    }
+
+    // Fungsi sinkronisasi tampilan tombol berdasarkan mode aktif
+    function updateUI() {
+        if (currentMode === "AUTO") {
+            btnAuto.className = "btn-active-mode";
+            btnManual.className = "";
+            btnOn.disabled = true;
+            btnOff.disabled = true;
+        } else {
+            btnAuto.className = "";
+            btnManual.className = "btn-active-mode";
+            btnOn.disabled = false;
+            btnOff.disabled = false;
+        }
+    }
+
+    // Jalankan websocket pertama kali saat web dibuka
+    inisialisasiWebSocket();
+</script>
+
+</body>
+</html>
