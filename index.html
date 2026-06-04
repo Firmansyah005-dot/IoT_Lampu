@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Lighting — IoTku</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0f1a;
+      --surface: #111827;
+      --surface2: #1a2234;
+      --border: rgba(255,255,255,0.07);
+      --accent: #38bdf8;
+      --accent-dim: rgba(56,189,248,0.12);
+      --warn: #f59e0b;
+      --warn-dim: rgba(245,158,11,0.15);
+      --success: #34d399;
+      --success-dim: rgba(52,211,153,0.12);
+      --danger: #f87171;
+      --danger-dim: rgba(248,113,113,0.12);
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --font-d: 'Syne', sans-serif;
+      --font-m: 'Share Tech Mono', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-d);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(56,189,248,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56,189,248,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .glow { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); width: 700px; height: 280px; background: radial-gradient(ellipse, rgba(56,189,248,0.07) 0%, transparent 70%); pointer-events: none; z-index: 0; }
+
+    header {
+      position: relative; z-index: 10;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 34px; height: 34px; border: 1.5px solid var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .logo-name { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+    .logo-sub  { font-family: var(--font-m); font-size: 10px; color: var(--muted); }
+
+    .hdr-right { display: flex; align-items: center; gap: 8px; font-family: var(--font-m); font-size: 11px; color: var(--muted); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background .4s; flex-shrink: 0; }
+    .dot.conn { background: var(--warn); animation: blink 1.2s infinite; }
+    .dot.on   { background: var(--success); box-shadow: 0 0 0 0 rgba(52,211,153,.5); animation: ripple 2.5s infinite; }
+    .dot.off  { background: var(--danger); }
+
+    @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:.3} }
+    @keyframes ripple { 0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.5)} 50%{box-shadow:0 0 0 5px rgba(52,211,153,0)} }
+
+    main {
+      position: relative; z-index: 10;
+      flex: 1;
+      max-width: 460px; width: 100%;
+      margin: 0 auto;
+      padding: 18px 14px 28px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      position: relative; overflow: hidden;
+    }
+    .card::after { content:''; position:absolute; top:0;left:0;right:0; height:1px; background:linear-gradient(90deg,transparent,rgba(56,189,248,.2),transparent); opacity:0; transition:opacity .3s; }
+    .card:hover::after { opacity:1; }
+
+    .clabel { font-family: var(--font-m); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+
+    /* ── LUX CARD */
+    .lux-card { text-align: center; }
+    .lux-wrap { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 4px 0 4px; }
+
+    #lux-value {
+      font-size: 80px; font-weight: 800; line-height: 1;
+      color: var(--accent);
+      transition: color .5s;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -3px;
+      min-width: 3ch; display: inline-block;
+    }
+    #lux-value.warm { color: var(--warn); }
+    #lux-value.bright { color: #fde68a; }
+
+    .lux-unit { font-family: var(--font-m); font-size: 22px; color: var(--muted); }
+
+    /* kondisi cahaya */
+    .lux-cond { font-family: var(--font-m); font-size: 11px; color: var(--muted); margin-bottom: 12px; letter-spacing:.08em; min-height:16px; transition:color .4s; }
+
+    /* bar */
+    .bar-wrap { height: 5px; background: rgba(255,255,255,.05); border-radius: 3px; overflow: hidden; margin-bottom: 14px; }
+    #lux-bar { height:100%; width:0%; border-radius:3px; background:linear-gradient(90deg, var(--accent), var(--warn), #fde68a); transition: width .7s ease; }
+
+    /* lamp badge */
+    .lamp-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 20px; border-radius: 99px;
+      font-family: var(--font-m); font-size: 12px; font-weight: 600; letter-spacing:.08em;
+      background: var(--surface2); border: 1px solid var(--border);
+      transition: all .4s;
+    }
+    .lamp-badge.on  { background: var(--warn-dim); border-color: rgba(245,158,11,.35); color: var(--warn); }
+    .lamp-badge.off { color: var(--muted); }
+    .lamp-badge .ico { font-size: 18px; transition: filter .4s; }
+    .lamp-badge.on .ico { filter: drop-shadow(0 0 7px var(--warn)); }
+
+    /* ── MODE CARD */
+    .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .div-line { height:1px; background:var(--border); margin-bottom:14px; }
+
+    .mbtn {
+      padding: 12px 8px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface2);
+      color: var(--muted); font-family: var(--font-m); font-size: 11px;
+      font-weight: 600; letter-spacing:.07em; text-transform:uppercase;
+      cursor: pointer; transition: all .2s; text-align:center;
+    }
+    .mbtn:hover { border-color: rgba(56,189,248,.3); color: var(--text); }
+    .mbtn.active { background: var(--accent-dim); border-color: rgba(56,189,248,.4); color: var(--accent); }
+
+    .sw-panel { transition: opacity .3s, filter .3s; }
+    .sw-panel.locked { opacity: .28; pointer-events: none; filter: blur(.5px); }
+
+    .sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .sbtn {
+      padding: 14px 8px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface2);
+      color: var(--muted); font-family: var(--font-m); font-size: 12px;
+      font-weight: 600; letter-spacing:.06em;
+      cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .sbtn:hover { border-color: rgba(255,255,255,.15); color: var(--text); }
+    #btn-on.active  { background: var(--success-dim); border-color: rgba(52,211,153,.4); color: var(--success); }
+    #btn-off.active { background: var(--danger-dim);  border-color: rgba(248,113,113,.4); color: var(--danger); }
+
+    /* ── LOG */
+    .log-card { background: #070c14; border-color: rgba(56,189,248,.1); }
+    .log-hdr  { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .log-title { font-family:var(--font-m); font-size:10px; color:var(--accent); letter-spacing:.1em; }
+    .log-clr  { font-family:var(--font-m); font-size:10px; color:var(--muted); background:none; border:none; cursor:pointer; letter-spacing:.05em; }
+    .log-clr:hover { color:var(--text); }
+    #log-box { height:90px; overflow-y:auto; font-family:var(--font-m); font-size:10.5px; line-height:1.75; }
+    #log-box::-webkit-scrollbar { width:3px; }
+    #log-box::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+    .ll { display:block; }
+    .lt { color:var(--muted); }
+    .ls { color:rgba(255,255,255,.12); margin:0 4px; }
+    .lm      { color:#4ade80; }
+    .lm.warn { color:var(--warn); }
+    .lm.err  { color:var(--danger); }
+    .lm.send { color:var(--accent); }
+
+    /* ── INFO */
+    .info-card { background: var(--surface2); padding: 14px 18px; }
+    .irow { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+    .irow:last-child { border-bottom:none; padding-bottom:0; }
+    .irow:first-child { padding-top:0; }
+    .ik { font-family:var(--font-m); font-size:10px; color:var(--muted); letter-spacing:.05em; }
+    .iv { font-family:var(--font-m); font-size:11px; font-weight:600; color:var(--text); }
+    .iv.on  { color:var(--success); }
+    .iv.off { color:var(--danger); }
+    .iv.conn { color:var(--warn); }
+
+    footer { position:relative; z-index:10; text-align:center; padding:14px; border-top:1px solid var(--border); font-family:var(--font-m); font-size:10px; color:var(--muted); letter-spacing:.06em; }
+  </style>
+</head>
+<body>
+<div class="glow"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">💡</div>
+    <div>
+      <div class="logo-name">Smart Lighting</div>
+      <div class="logo-sub">via iotku.org</div>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="dot conn" id="hdr-dot"></div>
+    <span id="hdr-txt">Menghubungkan...</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- LUX -->
+  <div class="card lux-card">
+    <div class="clabel">// intensitas cahaya</div>
+    <div class="lux-wrap">
+      <span id="lux-value">—</span>
+      <span class="lux-unit">Lux</span>
+    </div>
+    <div class="lux-cond" id="lux-cond">Menunggu data sensor...</div>
+    <div class="bar-wrap"><div id="lux-bar"></div></div>
+    <div class="lamp-badge off" id="lamp-badge">
+      <span class="ico">💡</span>
+      <span id="lamp-txt">LAMPU MATI</span>
+    </div>
+  </div>
+
+  <!-- MODE + SAKELAR -->
+  <div class="card">
+    <div class="clabel">// mode operasi</div>
+    <div class="mode-grid">
+      <button class="mbtn active" id="btn-auto"   onclick="sendCmd('AUTO')">⚙ Otomatis</button>
+      <button class="mbtn"        id="btn-manual" onclick="sendCmd('MANUAL')">✦ Manual</button>
+    </div>
+    <div class="div-line"></div>
+    <div class="clabel">// sakelar lampu (manual)</div>
+    <div class="sw-panel locked" id="sw-panel">
+      <div class="sw-grid">
+        <button class="sbtn" id="btn-on"  onclick="sendCmd('ON')"><span>▶</span> ON</button>
+        <button class="sbtn" id="btn-off" onclick="sendCmd('OFF')"><span>■</span> OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="card log-card">
+    <div class="log-hdr">
+      <span class="log-title">&gt;_ live traffic log</span>
+      <button class="log-clr" onclick="clearLog()">[ CLEAR ]</button>
+    </div>
+    <div id="log-box"></div>
+  </div>
+
+  <!-- INFO -->
+  <div class="card info-card">
+    <div class="irow"><span class="ik">CH. LUX (SENSOR)</span><span class="iv">ID: 00387</span></div>
+    <div class="irow"><span class="ik">CH. KONTROL</span><span class="iv">ID: 00390</span></div>
+    <div class="irow"><span class="ik">STATUS LUX</span><span class="iv conn" id="st-lux">● Menghubungkan</span></div>
+    <div class="irow"><span class="ik">STATUS KONTROL</span><span class="iv conn" id="st-ctrl">● Menghubungkan</span></div>
+    <div class="irow"><span class="ik">UPDATE TERAKHIR</span><span class="iv" id="last-up">—</span></div>
+    <div class="irow"><span class="ik">MODE AKTIF</span><span class="iv" id="st-mode">OTOMATIS</span></div>
+  </div>
+
+</main>
+<footer>&copy; 2026 — Prototipe IoT Lampu — iotku.org</footer>
+
+<script>
+// ══════════════════════════════════════════
+// KONFIGURASI — samakan dengan ESP32
+// ══════════════════════════════════════════
+const ID_LUX       = "00387";
+const PASS_LUX     = "0987654";
+const ID_KONTROL   = "00390";
+const PASS_KONTROL = "0987654";
+
+const URL_LUX    = `wss://iotku.org:443/?idsensor=${ID_LUX}&passkey=${PASS_LUX}`;
+const URL_CTRL   = `wss://iotku.org:443/?idsensor=${ID_KONTROL}&passkey=${PASS_KONTROL}`;
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let wsLux, wsCtrl;
+let isAuto = true;
+let lampOn = false;
+
+// ══════════════════════════════════════════
+// DOM
+// ══════════════════════════════════════════
+const luxEl    = document.getElementById('lux-value');
+const luxBar   = document.getElementById('lux-bar');
+const luxCond  = document.getElementById('lux-cond');
+const lampBadge= document.getElementById('lamp-badge');
+const lampTxt  = document.getElementById('lamp-txt');
+const hdrDot   = document.getElementById('hdr-dot');
+const hdrTxt   = document.getElementById('hdr-txt');
+const stLux    = document.getElementById('st-lux');
+const stCtrl   = document.getElementById('st-ctrl');
+const lastUp   = document.getElementById('last-up');
+const stMode   = document.getElementById('st-mode');
+const logBox   = document.getElementById('log-box');
+
+// ══════════════════════════════════════════
+// PARSE DATA DARI IOTKU
+// iotku membungkus data dalam JSON:
+// {"idsensor":"00387","nilai":"245","waktu":...}
+// Fungsi ini mengekstrak nilai mentahnya
+// ══════════════════════════════════════════
+function parseIotku(raw) {
+  raw = raw.toString().trim();
+  try {
+    const obj = JSON.parse(raw);
+    // Coba ambil dari key "nilai" (format iotku standar)
+    if (obj.nilai !== undefined) return String(obj.nilai).trim();
+    if (obj.msg   !== undefined) return String(obj.msg).trim();
+    if (obj.value !== undefined) return String(obj.value).trim();
+  } catch (e) {
+    // Bukan JSON — kembalikan apa adanya (plain string)
+  }
+  return raw;
+}
+
+// ══════════════════════════════════════════
+// KONEKSI LUX — terima data sensor cahaya
+// ══════════════════════════════════════════
+function connectLux() {
+  wsLux = new WebSocket(URL_LUX);
+
+  wsLux.onopen = () => {
+    stLux.textContent = '● Online';
+    stLux.className = 'iv on';
+    addLog('Lux channel terhubung', 'ok');
+  };
+
+  wsLux.onmessage = (e) => {
+    // iotku kirim JSON, kita ekstrak nilai lux-nya
+    const raw = e.data.toString();
+    const val = parseIotku(raw);
+    const num = parseInt(val);
+
+    addLog('← lux raw: ' + raw, '');
+
+    if (!isNaN(num)) {
+      updateLux(num);
+    } else {
+      addLog('Data lux tidak valid: ' + val, 'warn');
+    }
+  };
+
+  wsLux.onclose = () => {
+    stLux.textContent = '● Offline';
+    stLux.className = 'iv off';
+    addLog('Lux channel terputus — reconnect 5s...', 'err');
+    setTimeout(connectLux, 5000);
+  };
+
+  wsLux.onerror = () => addLog('Lux channel error', 'err');
+}
+
+// ══════════════════════════════════════════
+// KONEKSI KONTROL — kirim & terima perintah
+// ══════════════════════════════════════════
+function connectCtrl() {
+  wsCtrl = new WebSocket(URL_CTRL);
+
+  wsCtrl.onopen = () => {
+    hdrDot.className = 'dot on';
+    hdrTxt.textContent = 'Terhubung';
+    stCtrl.textContent = '● Online';
+    stCtrl.className = 'iv on';
+    addLog('Kontrol channel terhubung', 'ok');
+  };
+
+  wsCtrl.onmessage = (e) => {
+    const raw = e.data.toString();
+    const val = parseIotku(raw);
+    addLog('← ctrl: ' + val, 'ok');
+
+    // Sync UI dari echo/status ESP32 atau relay iotku
+    if (val === 'ON')     setLamp(true);
+    if (val === 'OFF')    setLamp(false);
+    if (val === 'AUTO')   setMode(true);
+    if (val === 'MANUAL') setMode(false);
+  };
+
+  wsCtrl.onclose = () => {
+    hdrDot.className = 'dot off';
+    hdrTxt.textContent = 'Terputus';
+    stCtrl.textContent = '● Offline';
+    stCtrl.className = 'iv off';
+    addLog('Kontrol channel terputus — reconnect 5s...', 'err');
+    setTimeout(connectCtrl, 5000);
+  };
+
+  wsCtrl.onerror = () => addLog('Kontrol channel error', 'err');
+}
+
+// ══════════════════════════════════════════
+// UPDATE TAMPILAN LUX
+// ══════════════════════════════════════════
+function updateLux(num) {
+  luxEl.textContent = num;
+  lastUp.textContent = new Date().toLocaleTimeString('id-ID');
+
+  // Warna angka berdasarkan intensitas
+  if (num < 50)        { luxEl.className = ''; luxCond.textContent = 'Sangat gelap'; }
+  else if (num < 150)  { luxEl.className = ''; luxCond.textContent = 'Redup'; }
+  else if (num < 400)  { luxEl.className = 'warm'; luxCond.textContent = 'Cahaya sedang'; }
+  else if (num < 800)  { luxEl.className = 'warm'; luxCond.textContent = 'Cahaya terang'; }
+  else                 { luxEl.className = 'bright'; luxCond.textContent = 'Sangat terang'; }
+
+  // Bar progress — referensi 2000 lux
+  const pct = Math.min(num / 2000 * 100, 100);
+  luxBar.style.width = pct.toFixed(1) + '%';
+
+  // Jika mode otomatis, sinkron tampilan lampu
+  if (isAuto) {
+    setLamp(num < 400);
+  }
+}
+
+// ══════════════════════════════════════════
+// KIRIM PERINTAH KE ESP32 VIA IOTKU
+// ══════════════════════════════════════════
+function sendCmd(cmd) {
+  if (!wsCtrl || wsCtrl.readyState !== WebSocket.OPEN) {
+    addLog('Channel kontrol belum siap!', 'err');
+    return;
+  }
+  wsCtrl.send(cmd);
+  addLog('→ kirim: ' + cmd, 'send');
+
+  if (cmd === 'AUTO')   setMode(true);
+  if (cmd === 'MANUAL') setMode(false);
+  if (cmd === 'ON')     setLamp(true);
+  if (cmd === 'OFF')    setLamp(false);
+}
+
+// ══════════════════════════════════════════
+// UPDATE UI MODE
+// ══════════════════════════════════════════
+function setMode(auto) {
+  isAuto = auto;
+  document.getElementById('btn-auto').classList.toggle('active', auto);
+  document.getElementById('btn-manual').classList.toggle('active', !auto);
+  document.getElementById('sw-panel').classList.toggle('locked', auto);
+  stMode.textContent = auto ? 'OTOMATIS' : 'MANUAL';
+}
+
+// ══════════════════════════════════════════
+// UPDATE UI LAMPU
+// ══════════════════════════════════════════
+function setLamp(on) {
+  lampOn = on;
+  document.getElementById('btn-on').classList.toggle('active', on);
+  document.getElementById('btn-off').classList.toggle('active', !on);
+  lampBadge.className = 'lamp-badge ' + (on ? 'on' : 'off');
+  lampTxt.textContent = on ? 'LAMPU MENYALA' : 'LAMPU MATI';
+}
+
+// ══════════════════════════════════════════
+// LOG
+// ══════════════════════════════════════════
+function addLog(msg, type) {
+  const t = new Date().toLocaleTimeString('id-ID');
+  const cls = type === 'send' ? 'send' : type === 'err' ? 'err' : type === 'warn' ? 'warn' : '';
+  const el = document.createElement('span');
+  el.className = 'll';
+  el.innerHTML = `<span class="lt">[${t}]</span><span class="ls">|</span><span class="lm ${cls}">${msg}</span>`;
+  if (!logBox.hasChildNodes()) logBox.textContent = '';
+  logBox.appendChild(el);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function clearLog() {
+  logBox.textContent = '';
+  addLog('Log dibersihkan', '');
+}
+
+// ══════════════════════════════════════════
+// START
+// ══════════════════════════════════════════
+addLog('Memulai koneksi ke iotku.org...', '');
+connectLux();
+connectCtrl();
+</script>
+</body>
+</html>
